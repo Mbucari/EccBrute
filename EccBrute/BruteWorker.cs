@@ -57,16 +57,10 @@ namespace EccBrute
 					{
 						var pubK = PublicKeys[k];
 
-						var newPKList = new List<(long x, long y)>(PublicKeys);
-						newPKList.Remove(pubK);
-						PublicKeys = newPKList.ToArray();
-
 						FoundKey?.Invoke(this, (i, pubK.x, pubK.y));
 						break;
 					}
 				}
-
-				CurrentPoint.Add(GeneratorPoint);
 
 				if (i % 1000000 == 0)
 				{
@@ -81,6 +75,8 @@ namespace EccBrute
 					}
 					ReportProgress((int)((i - Start) / (double)(End - Start) * 10000), new WorkerState { CurrentPoint = CurrentPoint.Clone(), CurrentPosition = CurrentPosition });
 				}
+
+				CurrentPoint.Add(GeneratorPoint);
 			}
 		}
 	}
