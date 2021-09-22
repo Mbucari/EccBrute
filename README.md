@@ -1,5 +1,5 @@
 # EccBrute
-Brute force 33-63 bit ECC private keys. I was able to check the entire keyspace of a 40-bit curve in under 24 hours using 8 cores on an i7-6700K.
+Brute force 33-63 bit ECC private keys. I was able to check the entire keyspace of a 40-bit curve in under 18 hours using 8 cores on an i7-6700K.
 
 Create a work.ini file in the EccBrut directory that follows the below format.
 
