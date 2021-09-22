@@ -4,6 +4,7 @@ using System.Linq;
 using System.IO;
 using System.Text;
 using System.Diagnostics;
+using System.Threading;
 
 namespace EccBrute
 {
@@ -29,6 +30,13 @@ namespace EccBrute
 			progressPath = Path.GetFileNameWithoutExtension(workFile) + ".json";
 			Progress = Progress.OpenOrCreate(WorkFile.Open(workFile), progressPath);
 
+			if (Progress.PublicKeys.Count == 0)
+			{
+				Console.WriteLine($"There are {Progress.FoundKeyPairs.Count} found keys in the database and no more public keys to find!");
+				return;
+			}
+
+			Thread.CurrentThread.Priority = ThreadPriority.Highest;
 			Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle;
 
 			var workers = Progress.Workers;
@@ -79,7 +87,8 @@ namespace EccBrute
 				}
 				catch(InvalidOperationException)
 				{
-					Console.WriteLine("\r\nFound all keys!");
+					string status = Progress.PublicKeys.Count == 0 ? "\r\nFound all keys!" : $"\r\nFinished searching. {Progress.PublicKeys.Count} keys not found.";
+					Console.WriteLine(status);
 					break;
 				}
 				catch (IOException)
@@ -104,13 +113,13 @@ namespace EccBrute
 				Message.CompleteAdding();
 		}
 
-		private static void Worker_FoundKey(object sender, (long privateKey, long pubX, long pubY) e)
+		private static void Worker_FoundKey(object sender, KeyPair e)
 		{
 			Progress.FoundKeyPairs.Add(e);
 
 			for (int i = Progress.PublicKeys.Count - 1; i >= 0; i--)
 			{
-				if (Progress.PublicKeys[i].x == e.pubX || Progress.PublicKeys[i].y == e.pubY)
+				if (Progress.PublicKeys[i].X == e.PublicKey.X || Progress.PublicKeys[i].Y == e.PublicKey.Y)
 					Progress.PublicKeys.RemoveAt(i);
 			}
 
@@ -124,7 +133,7 @@ namespace EccBrute
 					w.ReplacePublicKeyList(replacementPublicKeys);
 			}
 
-			var message = $"Found Private Key {e.privateKey} for Public Key ({e.pubX}, {e.pubY})";
+			var message = $"Found Private Key {e.PrivateKey} for Public Key ({e.PublicKey.X}, {e.PublicKey.Y})";
 			Message.Add((false, message));
 
 			if (replacementPublicKeys.Length == 0)
@@ -147,6 +156,9 @@ namespace EccBrute
 			var remaining = total - totalProcessed;
 
 			var rate = totalProcessed / (DateTime.Now - StartTime).TotalSeconds;
+
+			if (rate == 0) return;
+
 			var remainingTime = TimeSpan.FromSeconds(remaining / rate);
 
 			var sb = new StringBuilder();

@@ -11,8 +11,8 @@ namespace EccBrute
 	class Progress
 	{
 		public WorkFile WorkFile { get; set; }
-		public List<(long x, long y)> PublicKeys { get; set; }
-		public List<(long privateKey, long pubX, long pubY)> FoundKeyPairs { get; set; }
+		public List<PublicKey> PublicKeys { get; set; }
+		public List<KeyPair> FoundKeyPairs { get; set; }
 		public WorkProgress[] Workers { get; set; }
 
 		public void Save(string path)
@@ -49,12 +49,13 @@ namespace EccBrute
 
 		public static Progress CreateNew(WorkFile workFile, string savePath)
 		{
-			var progress = new Progress();
-
-			progress.WorkFile = workFile;
-			progress.PublicKeys = workFile.PublicKeys;
-			progress.Workers = new WorkProgress[workFile.Threads];
-			progress.FoundKeyPairs = new List<(long privateKey, long pubX, long pubY)>();
+			var progress = new Progress
+			{
+				WorkFile = workFile,
+				PublicKeys = new List<PublicKey>(workFile.PublicKeys),
+				Workers = new WorkProgress[workFile.Threads],
+				FoundKeyPairs = new List<KeyPair>()
+			};
 
 			var order = workFile.Order.HasValue ? BigInteger.ValueOf(workFile.Order.Value) : null;
 
@@ -78,13 +79,14 @@ namespace EccBrute
 
 				var startPoint = edpointBouncy.Multiply(BigInteger.ValueOf(start)).Normalize();
 
-				progress.Workers[i] = new WorkProgress();
-
-				progress.Workers[i].ThreadID = i;
-				progress.Workers[i].CurrentPoint = new FastEccPoint(startPoint);
-				progress.Workers[i].Start = start;
-				progress.Workers[i].CurrentPosition = start;
-				progress.Workers[i].End = endNum;
+				progress.Workers[i] = new WorkProgress
+				{
+					ThreadID = i,
+					CurrentPoint = new FastEccPoint(startPoint),
+					Start = start,
+					CurrentPosition = start,
+					End = endNum
+				};
 
 				start = endNum;
 			}

@@ -21,7 +21,7 @@ namespace EccBrute
 		public long Start { get; set; }
 		public long End { get; set; }
 		public int Threads { get; set; }		
-		public List<(long x, long y)> PublicKeys { get; set; }
+		public List<PublicKey> PublicKeys { get; set; }
 
 		public static WorkFile Open(string path)
 		{
@@ -74,26 +74,13 @@ namespace EccBrute
 			if (publicKeys64.Length == 0)
 				throw new Exception("No public keys to brite force.");
 
-			var publicKeys = new List<(long, long)>();
+			var publicKeys = new List<PublicKey>();
+
 			foreach (var pk in publicKeys64)
-			{
-				var bytes = Convert.FromBase64String(pk);
-
-				var b1 = new byte[5];
-				var b2 = new byte[5];
-				Array.Copy(bytes, 0, b1, 0, 5);
-				Array.Copy(bytes, 5, b2, 0, 5);
-				var publixX = (long)(new System.Numerics.BigInteger(b1, true, true));
-				var publixY = (long)(new System.Numerics.BigInteger(b2, true, true));
-
-				publicKeys.Add((publixX, publixY));
-			}
+				publicKeys.Add(PublicKey.Parse(pk));				
 
 			FastEccPoint.Curve_A = a;
-			FastEccPoint.NegCurve_A = -a;
 			FastEccPoint.Q = q;
-			var ABigInt = BigInteger.ValueOf(a);
-			FastEccPoint.BitLengthsDiff = ABigInt.BitLength < ABigInt.Negate().BitLength;
 
 			return new WorkFile
 			{
@@ -103,7 +90,7 @@ namespace EccBrute
 				Order = order,
 				Gx = gx,
 				Gy = gy,
-				GeneratorPoint = new FastEccPoint { X = gx, Y = gy, Z0 = 1, Z1 = a },
+				GeneratorPoint = new FastEccPoint { X = gx, Y = gy },
 				Start = start,
 				End = end,
 				Threads = threads,

@@ -8,27 +8,24 @@ namespace EccBrute
 	{
 		public static long Q;
 		public static long Curve_A;
-		public static long NegCurve_A;
-		public static bool BitLengthsDiff;
 
 		public long X;
 		public long Y;
-		public long Z0;
-		public long Z1;
 
 		public FastEccPoint() { }
 
 		public FastEccPoint(ECPoint eCPoint)
 		{
+			if (!eCPoint.IsNormalized())
+				eCPoint.Normalize();
+
 			X = eCPoint.XCoord.ToBigInteger().LongValueExact;
 			Y = eCPoint.YCoord.ToBigInteger().LongValueExact;
-			Z0 = eCPoint.GetZCoord(0).ToBigInteger().LongValueExact;
-			Z1 = eCPoint.GetZCoord(1).ToBigInteger().LongValueExact;
 		}
 
 		public FastEccPoint Clone()
 		{
-			return new FastEccPoint { X = this.X, Y = this.Y, Z0 = this.Z0, Z1 = this.Z1 };
+			return new FastEccPoint { X = this.X, Y = this.Y };
 		}
 
 		public void Add(FastEccPoint b)
@@ -119,7 +116,7 @@ namespace EccBrute
 
 		public override string ToString()
 		{
-			return $"({X:x},{Y:x},{Z0:x},{Curve_A:x})";
+			return $"({X:x},{Y:x},{1},{Curve_A:x})";
 		}
 	}
 }

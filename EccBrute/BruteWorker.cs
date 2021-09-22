@@ -10,20 +10,19 @@ namespace EccBrute
 {
 	internal class BruteWorker : BackgroundWorker
 	{
-		public event EventHandler<(long privateKey, long pubX, long pubY)> FoundKey;
+		public event EventHandler<KeyPair> FoundKey;
 		public int ThreadId { get; }
 		public long Start { get; }
-		public long CurrentPosition { get { return i; }  set { i = value; } }
+		public long CurrentPosition { get; set; }
 		public long End { get; }
-		public (long x, long y)[] PublicKeys { get; private set; }
+		public PublicKey[] PublicKeys { get; private set; }
 		public FastEccPoint CurrentPoint { get; }
 		public FastEccPoint GeneratorPoint { get; }
 
 		private object lockObject = new object();
-		private (long x, long y)[] ReplacementPublicKeys;
+		private PublicKey[] ReplacementPublicKeys;
 
-		private long i;
-		public BruteWorker(int thread, long startNum, long currentPosition, long endNum, List<(long x, long y)> publicKeys, FastEccPoint startPoint, FastEccPoint generatorPoint)
+		public BruteWorker(int thread, long startNum, long currentPosition, long endNum, List<PublicKey> publicKeys, FastEccPoint startPoint, FastEccPoint generatorPoint)
 		{
 			ThreadId = thread;
 			Start = startNum;
@@ -37,11 +36,11 @@ namespace EccBrute
 			PublicKeys = publicKeys.ToArray();
 		}
 
-		public void ReplacePublicKeyList((long x, long y)[] publicKeys)
+		public void ReplacePublicKeyList(PublicKey[] publicKeys)
 		{
 			lock (lockObject)
 			{
-				ReplacementPublicKeys = new (long x, long y)[publicKeys.Length];
+				ReplacementPublicKeys = new PublicKey[publicKeys.Length];
 				Array.Copy(publicKeys, ReplacementPublicKeys, publicKeys.Length);
 			}
 		}
@@ -49,31 +48,31 @@ namespace EccBrute
 		{
 			Thread.CurrentThread.Priority = ThreadPriority.Lowest;
 
-			for (; i < End && !CancellationPending; i++)
+			for (; CurrentPosition < End && !CancellationPending; CurrentPosition++)
 			{
 				for (int k = 0; k < PublicKeys.Length; k++)
 				{
-					if (CurrentPoint.X == PublicKeys[k].x && CurrentPoint.Y == PublicKeys[k].y)
+					if (CurrentPoint.X == PublicKeys[k].X && CurrentPoint.Y == PublicKeys[k].Y)
 					{
 						var pubK = PublicKeys[k];
 
-						FoundKey?.Invoke(this, (i, pubK.x, pubK.y));
+						FoundKey?.Invoke(this, new KeyPair { PrivateKey = CurrentPosition, PublicKey = pubK });
 						break;
 					}
 				}
 
-				if (i % 1000000 == 0)
+				if (CurrentPosition % 1000000 == 0)
 				{
 					lock (lockObject)
 					{
 						if (ReplacementPublicKeys != null)
 						{
-							PublicKeys = new (long x, long y)[ReplacementPublicKeys.Length];
+							PublicKeys = new PublicKey[ReplacementPublicKeys.Length];
 							Array.Copy(ReplacementPublicKeys, PublicKeys, ReplacementPublicKeys.Length);
 							ReplacementPublicKeys = null;
 						}
 					}
-					ReportProgress((int)((i - Start) / (double)(End - Start) * 10000), new WorkerState { CurrentPoint = CurrentPoint.Clone(), CurrentPosition = CurrentPosition });
+					ReportProgress((int)((CurrentPosition - Start) / (double)(End - Start) * 10000), new WorkerState { CurrentPoint = CurrentPoint.Clone(), CurrentPosition = CurrentPosition });
 				}
 
 				CurrentPoint.Add(GeneratorPoint);
