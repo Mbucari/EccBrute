@@ -94,7 +94,7 @@ namespace EccBrute
 		}
 
 		/// <summary>
-		/// Fast mulmod. Works for mod.bitlen <= 128 - (a * b).bitlen.  
+		/// Fast mulmod. Works for (a * b).bitlen + mod.bitlen <= 128.  
 		/// If a, b, and mod are same size, max supported size is 42 bits.
 		/// </summary>
 		static long MulMod(long a, long b, long mod)
