@@ -1,5 +1,7 @@
 # EccBrute
-Brute force 33-63 bit ECC private keys. I was able to check the entire keyspace of a 40-bit curve in under 18 hours using 8 cores on an i7-6700K.
+Brute force 33-42 bit ECC private keys. I was able to check the entire keyspace of a 40-bit curve in under 18 hours using 8 cores on an i7-6700K.
+
+The speed of this program comes from the fast mulmod algorithm. Mulmod, or the modular product, is a * b mod q.  When a * b overflows 64 bits, the modulus can't be computed in a single instruction.  This mulmod implementation uses Math.BigMul to calculate and store the product in two qwords, then calculates the modulus in two steps.  This only works if bitlength(a * b) + bitlength(q) <= 128. In practice, this means it will only work if the curve's Q parameter is 42 bits or less. This will work for Qs smaller than 33 bits, but in those cases the product would fit in a qword and you can use the language's built-in mod operator.
 
 Create a work.ini file in the EccBrut directory that follows the below format.
 
