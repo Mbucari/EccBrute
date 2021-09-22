@@ -43,7 +43,6 @@ namespace EccBrute
 			X = ModSubtract((MultMod(R, R, Q) + G) % Q, MultMod(2L, V, Q)) % Q;
 			Y = MultiplyMinusProduct(ModSubtract(V, X), R, G, this.Y);
 			Z0 = H;
-			Z1 = CalculateJacobianModifiedW(HSquared); 
 
 			Normalize();
 		}
@@ -53,12 +52,11 @@ namespace EccBrute
 			var zInv = ModInverse(Z0);
 
 			var zInv2 = MultMod(zInv, zInv, Q);
-			var zInv3 = MultMod(zInv2, zInv , Q);
+			var zInv3 = MultMod(zInv2, zInv, Q);
 
-			X = MultMod(X , zInv2, Q);
+			X = MultMod(X, zInv2, Q);
 			Y = MultMod(Y, zInv3, Q);
 			Z0 = 1;
-			Z1 = Curve_A;
 		}
 
 		private static long ModSubtract(long x1, long x2)
@@ -69,7 +67,7 @@ namespace EccBrute
 		}
 		private static long MultiplyMinusProduct(long baseNum, long b, long x, long y)
 		{
-			return ModSubtract(MultMod(baseNum , b,  Q), MultMod(x , y, Q));
+			return ModSubtract(MultMod(baseNum, b, Q), MultMod(x, y, Q));
 		}
 		private static long ModInverse(long num)
 		{
@@ -99,26 +97,11 @@ namespace EccBrute
 				tmp = t;
 				t = old_t - quotient * t;
 				old_t = tmp;
-
 			}
+
 			bez1 = old_s;
 			bez2 = old_t;
 			return old_r;
-		}
-
-		private static long CalculateJacobianModifiedW(long zSquared)
-		{
-			var W = MultMod(zSquared , zSquared, Q);
-
-			if (BitLengthsDiff)
-			{
-				W = -(MultMod(W , NegCurve_A , Q));
-			}
-			else
-			{
-				W = MultMod(W , Curve_A, Q);
-			}
-			return W;
 		}
 
 		static long MultMod(long x, long y, long b)
@@ -142,7 +125,7 @@ namespace EccBrute
 
 		public override string ToString()
 		{
-			return $"({X:x},{Y:x},{Z0:x},{Z1:x})";
+			return $"({X:x},{Y:x},{Z0:x},{Curve_A:x})";
 		}
 	}
 }
