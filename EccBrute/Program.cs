@@ -24,13 +24,12 @@ namespace EccBrute
 #if DEBUG
 			var workFile = "testwork.ini";
 #else
-
 			var workFile = "work.ini";
 #endif
 			progressPath = Path.GetFileNameWithoutExtension(workFile) + ".json";
 			Progress = Progress.OpenOrCreate(WorkFile.Open(workFile), progressPath);
 
-			//Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle;
+			Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle;
 
 			var workers = Progress.Workers;
 			Workers = new BruteWorker[workers.Length];
