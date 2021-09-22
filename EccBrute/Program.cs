@@ -16,7 +16,7 @@ namespace EccBrute
 		static int[] WorkerProgress;
 		static long[] WorkerCount;
 		static long AlreadyCompleted;
-		static Progress Progress;
+		static BruteDB Progress;
 		static string progressPath;
 		static DateTime StartTime;
 
@@ -28,9 +28,9 @@ namespace EccBrute
 			var workFile = "work.ini";
 #endif
 			progressPath = Path.GetFileNameWithoutExtension(workFile) + ".json";
-			Progress = Progress.OpenOrCreate(WorkFile.Open(workFile), progressPath);
+			Progress = BruteDB.OpenOrCreate(WorkFile.Open(workFile), progressPath);
 
-			if (Progress.PublicKeys.Count == 0)
+			if (Progress.PublicKeysToFind.Count == 0)
 			{
 				Console.WriteLine($"There are {Progress.FoundKeyPairs.Count} found keys in the database and no more public keys to find!");
 				return;
@@ -48,7 +48,7 @@ namespace EccBrute
 
 			for (int i = 0; i < workers.Length; i++)
 			{
-				Workers[i] = new BruteWorker(i, workers[i].Start, workers[i].CurrentPosition, workers[i].End, Progress.PublicKeys, workers[i].CurrentPoint, Progress.WorkFile.GeneratorPoint);
+				Workers[i] = new BruteWorker(i, workers[i].Start, workers[i].CurrentPosition, workers[i].End, Progress.PublicKeysToFind, workers[i].CurrentPoint, Progress.WorkFile.GeneratorPoint);
 				Workers[i].ProgressChanged += Worker_ProgressChanged;
 				Workers[i].FoundKey += Worker_FoundKey;
 				Workers[i].RunWorkerCompleted += Worker_RunWorkerCompleted;
@@ -87,7 +87,7 @@ namespace EccBrute
 				}
 				catch(InvalidOperationException)
 				{
-					string status = Progress.PublicKeys.Count == 0 ? "\r\nFound all keys!" : $"\r\nFinished searching. {Progress.PublicKeys.Count} keys not found.";
+					string status = Progress.PublicKeysToFind.Count == 0 ? "\r\nFound all keys!" : $"\r\nFinished searching. {Progress.PublicKeysToFind.Count} keys not found.";
 					Console.WriteLine(status);
 					break;
 				}
@@ -117,13 +117,13 @@ namespace EccBrute
 		{
 			Progress.FoundKeyPairs.Add(e);
 
-			for (int i = Progress.PublicKeys.Count - 1; i >= 0; i--)
+			for (int i = Progress.PublicKeysToFind.Count - 1; i >= 0; i--)
 			{
-				if (Progress.PublicKeys[i].X == e.PublicKey.X || Progress.PublicKeys[i].Y == e.PublicKey.Y)
-					Progress.PublicKeys.RemoveAt(i);
+				if (Progress.PublicKeysToFind[i].X == e.PublicKey.X || Progress.PublicKeysToFind[i].Y == e.PublicKey.Y)
+					Progress.PublicKeysToFind.RemoveAt(i);
 			}
 
-			var replacementPublicKeys = Progress.PublicKeys.ToArray();
+			var replacementPublicKeys = Progress.PublicKeysToFind.ToArray();
 
 			foreach (var w in Workers)
 			{

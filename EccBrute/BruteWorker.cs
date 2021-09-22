@@ -54,9 +54,7 @@ namespace EccBrute
 				{
 					if (CurrentPoint.X == PublicKeys[k].X && CurrentPoint.Y == PublicKeys[k].Y)
 					{
-						var pubK = PublicKeys[k];
-
-						FoundKey?.Invoke(this, new KeyPair { PrivateKey = CurrentPosition, PublicKey = pubK });
+						FoundKey?.Invoke(this, new KeyPair { PrivateKey = CurrentPosition, PublicKey = PublicKeys[k] });
 						break;
 					}
 				}
@@ -67,8 +65,7 @@ namespace EccBrute
 					{
 						if (ReplacementPublicKeys != null)
 						{
-							PublicKeys = new PublicKey[ReplacementPublicKeys.Length];
-							Array.Copy(ReplacementPublicKeys, PublicKeys, ReplacementPublicKeys.Length);
+							PublicKeys = ReplacementPublicKeys;
 							ReplacementPublicKeys = null;
 						}
 					}

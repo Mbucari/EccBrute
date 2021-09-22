@@ -8,10 +8,10 @@ using System.Text.Json;
 namespace EccBrute
 {
 	[Serializable]
-	class Progress
+	class BruteDB
 	{
 		public WorkFile WorkFile { get; set; }
-		public List<PublicKey> PublicKeys { get; set; }
+		public List<PublicKey> PublicKeysToFind { get; set; }
 		public List<KeyPair> FoundKeyPairs { get; set; }
 		public WorkProgress[] Workers { get; set; }
 
@@ -23,18 +23,18 @@ namespace EccBrute
 			File.WriteAllText(path, jsonStr);
 		}
 
-		public static Progress OpenOrCreate(WorkFile workFile, string progressFile)
+		public static BruteDB OpenOrCreate(WorkFile workFile, string progressFile)
 		{
 			if (File.Exists(progressFile))
 				return Open(workFile, progressFile);
 			return CreateNew(workFile, progressFile);
 		}
 
-		public static Progress Open(WorkFile workFile, string progressFile)
+		public static BruteDB Open(WorkFile workFile, string progressFile)
 		{
 			var jsonStr = File.ReadAllText(progressFile);
 			var options = new JsonSerializerOptions { IncludeFields = true };
-			var progress = JsonSerializer.Deserialize<Progress>(jsonStr, options);
+			var progress = JsonSerializer.Deserialize<BruteDB>(jsonStr, options);
 
 			if (progress.WorkFile.A != workFile.A ||
 				progress.WorkFile.B != workFile.B ||
@@ -42,17 +42,17 @@ namespace EccBrute
 				progress.WorkFile.Gx != workFile.Gx ||
 				progress.WorkFile.Gy != workFile.Gy ||
 				progress.WorkFile.Order != workFile.Order)
-				throw new Exception($"{nameof(WorkFile)} parameters don't match {nameof(Progress)}.{nameof(progress.WorkFile)}");
+				throw new Exception($"{nameof(WorkFile)} parameters don't match {nameof(BruteDB)}.{nameof(progress.WorkFile)}");
 
 			return progress;
 		}
 
-		public static Progress CreateNew(WorkFile workFile, string savePath)
+		public static BruteDB CreateNew(WorkFile workFile, string savePath)
 		{
-			var progress = new Progress
+			var progress = new BruteDB
 			{
 				WorkFile = workFile,
-				PublicKeys = new List<PublicKey>(workFile.PublicKeys),
+				PublicKeysToFind = new List<PublicKey>(workFile.PublicKeys),
 				Workers = new WorkProgress[workFile.Threads],
 				FoundKeyPairs = new List<KeyPair>()
 			};
