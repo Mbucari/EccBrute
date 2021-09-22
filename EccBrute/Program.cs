@@ -21,11 +21,11 @@ namespace EccBrute
 
 		static void Main(string[] args)
 		{
-			var workFile = "work.ini";
+			var workFile = "testwork.ini";
 			progressPath = Path.GetFileNameWithoutExtension(workFile) + ".json";
 			Progress = Progress.OpenOrCreate(WorkFile.Open(workFile), progressPath);
 
-			Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle;
+			//Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle;
 
 			var workers = Progress.Workers;
 			Workers = new BruteWorker[workers.Length];
@@ -51,7 +51,7 @@ namespace EccBrute
 				{
 					var message = Message.Take();
 
-					if (DateTime.Now - lastProgressReport < reportInterval)
+					if (DateTime.Now - lastProgressReport < reportInterval && message.repeating)
 						continue;
 
 					var sb = new StringBuilder();
