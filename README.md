@@ -13,5 +13,6 @@ order=[EC order (not currently used for anything, but the largest private key sh
 start=[First private key to test]
 end=[Last private key to test]
 threads=[# of worker threads to spawn]
-publickeys=[Comma-deliminated list of public keys to crack. Keys should be a base-64 encoded, big-endien byte array of the X coordinate followed by the Y coordinate.
+publickeys=[Comma-deliminated list of public keys to crack. Keys should be a base-64 encoded, big-endian byte array of the X coordinate followed by the Y coordinate.]
 ```
+Progress is continually saved to work.json, and you may resume a job any time. Cracked keys are stored in the work.json.
