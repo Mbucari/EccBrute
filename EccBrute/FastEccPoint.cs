@@ -42,21 +42,13 @@ namespace EccBrute
 
 			X = ModSubtract((MultMod(R, R, Q) + G) % Q, MultMod(2L, V, Q)) % Q;
 			Y = MultiplyMinusProduct(ModSubtract(V, X), R, G, this.Y);
-			Z0 = H;
 
-			Normalize();
-		}
-
-		public void Normalize()
-		{
-			var zInv = ModInverse(Z0);
-
+			var zInv = ModInverse(H);
 			var zInv2 = MultMod(zInv, zInv, Q);
 			var zInv3 = MultMod(zInv2, zInv, Q);
 
 			X = MultMod(X, zInv2, Q);
 			Y = MultMod(Y, zInv3, Q);
-			Z0 = 1;
 		}
 
 		private static long ModSubtract(long x1, long x2)
@@ -65,10 +57,12 @@ namespace EccBrute
 				return x1 - x2 + Q;
 			return x1 - x2;
 		}
+
 		private static long MultiplyMinusProduct(long baseNum, long b, long x, long y)
 		{
 			return ModSubtract(MultMod(baseNum, b, Q), MultMod(x, y, Q));
 		}
+
 		private static long ModInverse(long num)
 		{
 			ExtendedEuclideanAlgorithm(num, Q, out var x, out _);
