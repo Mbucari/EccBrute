@@ -7,7 +7,7 @@ namespace EccBrute
 		public PublicKey PublicKey;
 		public long PrivateKey;
 
-		public string PrivateKeyToQLMString()
+		public string PrivateKeyToAsn1String()
 		{
 			var pkBytes = new System.Numerics.BigInteger(PrivateKey).ToByteArray(true, true);
 			Array.Reverse(pkBytes);

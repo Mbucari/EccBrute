@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
+﻿
 namespace EccBrute
 {
-	[Serializable]
 	class WorkProgress
 	{
 		public int ThreadID { get; set; }
@@ -15,5 +9,4 @@ namespace EccBrute
 		public long CurrentPosition { get; set; }
 		public long End { get; set; }
 	}
-
 }

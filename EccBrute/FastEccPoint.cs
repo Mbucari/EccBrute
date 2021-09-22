@@ -3,11 +3,9 @@ using System;
 
 namespace EccBrute
 {
-	[Serializable]
 	class FastEccPoint
 	{
 		public static long Q;
-		public static long Curve_A;
 
 		public long X;
 		public long Y;
@@ -33,19 +31,19 @@ namespace EccBrute
 			long H = ModSubtract(this.X, b.X);
 			long R = ModSubtract(this.Y, b.Y);
 
-			var HSquared = MultMod(H , H, Q);
-			var G = MultMod(HSquared , H, Q);
-			var V = MultMod(HSquared, this.X, Q);
+			var HSquared = MulMod(H , H, Q);
+			var G = MulMod(HSquared , H, Q);
+			var V = MulMod(HSquared, this.X, Q);
 
-			X = ModSubtract((MultMod(R, R, Q) + G) % Q, MultMod(2L, V, Q)) % Q;
+			X = ModSubtract((MulMod(R, R, Q) + G) % Q, MulMod(2L, V, Q)) % Q;
 			Y = MultiplyMinusProduct(ModSubtract(V, X), R, G, this.Y);
 
 			var zInv = ModInverse(H);
-			var zInv2 = MultMod(zInv, zInv, Q);
-			var zInv3 = MultMod(zInv2, zInv, Q);
+			var zInv2 = MulMod(zInv, zInv, Q);
+			var zInv3 = MulMod(zInv2, zInv, Q);
 
-			X = MultMod(X, zInv2, Q);
-			Y = MultMod(Y, zInv3, Q);
+			X = MulMod(X, zInv2, Q);
+			Y = MulMod(Y, zInv3, Q);
 		}
 
 		private static long ModSubtract(long x1, long x2)
@@ -57,7 +55,7 @@ namespace EccBrute
 
 		private static long MultiplyMinusProduct(long baseNum, long b, long x, long y)
 		{
-			return ModSubtract(MultMod(baseNum, b, Q), MultMod(x, y, Q));
+			return ModSubtract(MulMod(baseNum, b, Q), MulMod(x, y, Q));
 		}
 
 		private static long ModInverse(long num)
@@ -95,28 +93,34 @@ namespace EccBrute
 			return old_r;
 		}
 
-		static long MultMod(long x, long y, long b)
+		/// <summary>
+		/// Fast mulmod. Works for mod.bitlen <= 128 - (a * b).bitlen.  
+		/// If a, b, and mod are same size, max supported size is 42 bits.
+		/// </summary>
+		static long MulMod(long a, long b, long mod)
 		{
-			var high = Math.BigMul((ulong)x, (ulong)y, out var low);
+			var high = Math.BigMul((ulong)a, (ulong)b, out var low);
 			var divTry = high;
 
 			var shiftCount = 0;
 
+			//Count how many bits are in the high qword
 			for (; divTry > 0; shiftCount++)
 				divTry >>= 1;
 
-			divTry = (high << (64 - shiftCount)) | (low >> shiftCount);
+			//Shift number to fill high qword
+			high = (high << (64 - shiftCount)) | (low >> shiftCount);
 
+			var rem = high % (ulong)mod;
 			var mask = (1UL << shiftCount) - 1;
-			var rem = divTry % (ulong)b;
 			var newVal = (rem << shiftCount) | (mask & low);
 
-			return (long)(newVal % (ulong)b);
+			return (long)(newVal % (ulong)mod);
 		}
 
 		public override string ToString()
 		{
-			return $"({X:x},{Y:x},{1},{Curve_A:x})";
+			return $"({X:x},{Y:x})";
 		}
 	}
 }

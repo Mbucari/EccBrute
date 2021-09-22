@@ -1,14 +1,9 @@
-﻿using Org.BouncyCastle.Math;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace EccBrute
 {
-	[Serializable]
 	class WorkFile
 	{
 		public long Q { get; set; }
@@ -79,7 +74,6 @@ namespace EccBrute
 			foreach (var pk in publicKeys64)
 				publicKeys.Add(PublicKey.Parse(pk));				
 
-			FastEccPoint.Curve_A = a;
 			FastEccPoint.Q = q;
 
 			return new WorkFile

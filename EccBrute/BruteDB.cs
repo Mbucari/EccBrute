@@ -7,7 +7,6 @@ using System.Text.Json;
 
 namespace EccBrute
 {
-	[Serializable]
 	class BruteDB
 	{
 		public WorkFile WorkFile { get; set; }

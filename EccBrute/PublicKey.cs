@@ -8,9 +8,9 @@ namespace EccBrute
 		public long Y;
 		public int Size;
 
-		public static PublicKey Parse(string encoded)
+		public static PublicKey Parse(string beEncoded)
 		{
-			var bytes = Convert.FromBase64String(encoded);
+			var bytes = Convert.FromBase64String(beEncoded);
 
 			int size = bytes.Length;
 
@@ -25,7 +25,7 @@ namespace EccBrute
 			return new PublicKey { X = publixX, Y = publixY, Size = size };
 		}
 
-		public string ToQLMString()
+		public string ToBase64BEString()
 		{
 			var b1 = new System.Numerics.BigInteger(X).ToByteArray(true, true);
 			var b2 = new System.Numerics.BigInteger(Y).ToByteArray(true, true);
