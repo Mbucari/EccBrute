@@ -16,7 +16,7 @@ namespace EccBrute
 
 		public void Save(string path)
 		{
-			var options = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true };
+			var options = new JsonSerializerOptions { WriteIndented = true };
 			var jsonStr = JsonSerializer.Serialize(this, GetType(), options);
 
 			File.WriteAllText(path, jsonStr);
@@ -32,7 +32,7 @@ namespace EccBrute
 		public static BruteDB Open(WorkFile workFile, string progressFile)
 		{
 			var jsonStr = File.ReadAllText(progressFile);
-			var options = new JsonSerializerOptions { IncludeFields = true };
+			var options = new JsonSerializerOptions();
 			var progress = JsonSerializer.Deserialize<BruteDB>(jsonStr, options);
 
 			if (progress.WorkFile.A != workFile.A ||
@@ -76,14 +76,23 @@ namespace EccBrute
 			{
 				long endNum = i == workFile.Threads - 1 ? workFile.End : start + step;
 
-				var startPoint = edpointBouncy.Multiply(BigInteger.ValueOf(start)).Normalize();
+				long remainder = (endNum - start) % 4;
+
+				endNum += (4 - remainder);
+
+				var vecStep = (endNum - start) / 4;
+
+				var startPoint0 = edpointBouncy.Multiply(BigInteger.ValueOf(start)).Normalize();
+				var startPoint1 = edpointBouncy.Multiply(BigInteger.ValueOf(start + vecStep)).Normalize();
+				var startPoint2 = edpointBouncy.Multiply(BigInteger.ValueOf(start + 2 * vecStep)).Normalize();
+				var startPoint3 = edpointBouncy.Multiply(BigInteger.ValueOf(start + 3 * vecStep)).Normalize();
 
 				progress.Workers[i] = new WorkProgress
 				{
 					ThreadID = i,
-					CurrentPoint = new FastEccPoint(startPoint),
+					CurrentPoint = new FastEccPoint(startPoint0, startPoint1, startPoint2, startPoint3),
+					CurrentPosition =  new long[] { start, start + vecStep , start + 2 * vecStep , start + 3 * vecStep },
 					Start = start,
-					CurrentPosition = start,
 					End = endNum
 				};
 

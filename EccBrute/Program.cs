@@ -5,6 +5,8 @@ using System.IO;
 using System.Text;
 using System.Diagnostics;
 using System.Threading;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EccBrute
 {
@@ -43,11 +45,12 @@ namespace EccBrute
 			Workers = new BruteWorker[workers.Length];
 			WorkerProgress = new int[workers.Length];
 			WorkerCount = new long[workers.Length];
-			AlreadyCompleted = workers.Sum(w => w.CurrentPosition - w.Start);
+			AlreadyCompleted = workers.Sum(w => (w.CurrentPosition[0] - w.Start) * 4);
 			StartTime = DateTime.Now;
 
 			for (int i = 0; i < workers.Length; i++)
 			{
+				//Workers[i] = new BruteWorker(i, workers[i].Start, workers[i].CurrentPosition, workers[i].End, Progress.PublicKeysToFind, workers[i].CurrentPoint, Progress.WorkFile.GeneratorPoint);
 				Workers[i] = new BruteWorker(i, workers[i].Start, workers[i].CurrentPosition, workers[i].End, Progress.PublicKeysToFind, workers[i].CurrentPoint, Progress.WorkFile.GeneratorPoint);
 				Workers[i].ProgressChanged += Worker_ProgressChanged;
 				Workers[i].FoundKey += Worker_FoundKey;
@@ -112,32 +115,36 @@ namespace EccBrute
 			if (WorkerProgress.Sum() == WorkerProgress.Length * 10000)
 				Message.CompleteAdding();
 		}
+		private class KeyPairComparer : IEqualityComparer<PublicKey>
+		{
+			public bool Equals(PublicKey x, PublicKey y)
+			{
+				return x.X == y.X && x.Y == y.Y;
+			}
 
-		private static void Worker_FoundKey(object sender, KeyPair e)
+			public int GetHashCode([DisallowNull] PublicKey obj)
+			{
+				return obj.GetHashCode();
+			}
+		}
+		private static PublicKey[] Worker_FoundKey(object sender, KeyPair e)
 		{
 			Progress.FoundKeyPairs.Add(e);
 
-			for (int i = Progress.PublicKeysToFind.Count - 1; i >= 0; i--)
-			{
-				if (Progress.PublicKeysToFind[i].X == e.PublicKey.X || Progress.PublicKeysToFind[i].Y == e.PublicKey.Y)
-					Progress.PublicKeysToFind.RemoveAt(i);
-			}
+			Progress.PublicKeysToFind = Progress.PublicKeysToFind.Except(Progress.FoundKeyPairs.Select(k=> k.PublicKey), new KeyPairComparer()).ToList();
 
-			var replacementPublicKeys = Progress.PublicKeysToFind.ToArray();
-
-			foreach (var w in Workers)
+			if (!Progress.PublicKeysToFind.Any())
 			{
-				if (replacementPublicKeys.Length == 0)
+				foreach (var w in Workers)
 					w.CancelAsync();
-				else
-					w.ReplacePublicKeyList(replacementPublicKeys);
 			}
 
 			var message = $"Found Private Key {e.PrivateKey} for Public Key ({e.PublicKey.X}, {e.PublicKey.Y})";
 			Message.Add((false, message));
 
-			if (replacementPublicKeys.Length == 0)
+			if (!Progress.PublicKeysToFind.Any())
 				Message.CompleteAdding();
+			return Progress.PublicKeysToFind.ToArray();
 		}
 
 		private static void Worker_ProgressChanged(object sender, System.ComponentModel.ProgressChangedEventArgs e)
@@ -145,11 +152,11 @@ namespace EccBrute
 			var worker = sender as BruteWorker;
 			var state = e.UserState as WorkerState;
 
-			Progress.Workers[worker.ThreadId].CurrentPoint = state.CurrentPoint;
-			Progress.Workers[worker.ThreadId].CurrentPosition = state.CurrentPosition;
+			Progress.Workers[worker.ThreadId].CurrentPoint = state.CurrentPoint2;
+			Progress.Workers[worker.ThreadId].CurrentPosition = state.CurrentPosition2;
 
 			WorkerProgress[worker.ThreadId] = e.ProgressPercentage;
-			WorkerCount[worker.ThreadId] = worker.CurrentPosition - worker.Start;
+			WorkerCount[worker.ThreadId] = (worker.CurrentPosition[0] - worker.Start) * 4;
 
 			var total = Progress.WorkFile.End - Progress.WorkFile.Start - AlreadyCompleted;
 			var totalProcessed = WorkerCount.Sum() - AlreadyCompleted;

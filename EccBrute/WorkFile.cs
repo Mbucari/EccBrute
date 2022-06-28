@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+using System.Security.Cryptography;
 
 namespace EccBrute
 {
@@ -74,7 +77,7 @@ namespace EccBrute
 			foreach (var pk in publicKeys64)
 				publicKeys.Add(PublicKey.Parse(pk));				
 
-			FastEccPoint.Q = q;
+			FastEccPoint.Q = (ulong)q;
 
 			return new WorkFile
 			{
@@ -84,7 +87,7 @@ namespace EccBrute
 				Order = order,
 				Gx = gx,
 				Gy = gy,
-				GeneratorPoint = new FastEccPoint { X = gx, Y = gy },
+				GeneratorPoint = new FastEccPoint { FourPointsX = Vector256.Create(gx, gx, gx, gx), FourPointsY = Vector256.Create(gy, gy, gy, gy) },
 				Start = start,
 				End = end,
 				Threads = threads,
