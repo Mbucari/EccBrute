@@ -90,21 +90,21 @@ namespace EccBrute
 			var workFilePath = "work.ini";
 
 			var workFile = WorkFile.Open(workFilePath);
-			var order = workFile.Order.Value;
 			var generator = workFile.GeneratorPoint;
 
-			List<EccChainEndpoint> endpoints = new List<EccChainEndpoint>();
+			List<EccChainEndpoint> endpoints = new();
 
-			int numThreads = 8, entriesPerThread = 40000;
-			var numDbEntryes = numThreads * entriesPerThread;
-			long stepSize = order / numDbEntryes + 1;
-			long threadStart = 0;
-			List<Task<List<EccChainEndpoint>>> dbGenTasks = new List<Task<List<EccChainEndpoint>>>();
+			var numDbEntryes = 250000;
+			var entriesPerThread = numDbEntryes / workFile.Threads + 1;
+			long threadStart = 0, stepSize = workFile.Order / numDbEntryes + 1;
+			List<Task<List<EccChainEndpoint>>> dbGenTasks = new();
+
 			Console.WriteLine($"Generating a database of {numDbEntryes} ECC Points...");
-			for (int t = 0; t < numThreads; t++)
+
+			for (int t = 0; t < workFile.Threads; t++)
 			{
 				var start = threadStart;
-				var end = Math.Min(order - 1, start + stepSize * entriesPerThread);
+				var end = Math.Min(workFile.Order - 1, start + stepSize * entriesPerThread);
 				threadStart = end;
 
 				dbGenTasks.Add(Task.Run(() => GenerateDb(generator, start, end, stepSize)));
@@ -122,7 +122,7 @@ namespace EccBrute
 			Console.WriteLine($"\r\n--- BEGIN finding private keys for {workFile.PublicKeys.Count} public keys ---\r\n");
 
 			List<Task> keySearchTasks = new();
-			SemaphoreSlim sema = new(numThreads, numThreads);
+			SemaphoreSlim sema = new(workFile.Threads, workFile.Threads);
 			foreach (var pk in workFile.PublicKeys)
 			{
 				keySearchTasks.Add(Task.Run(() => FindKeys(sema, endpoints, generator, pk)));

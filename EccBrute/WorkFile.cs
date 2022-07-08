@@ -9,7 +9,7 @@ namespace EccBrute
 		public long Q { get; set; }
 		public long A { get; set; }
 		public long B { get; set; }
-		public long? Order { get; set; }
+		public long Order { get; set; }
 		public long Gx { get; set; }
 		public long Gy { get; set; }
 		public FastEccPoint GeneratorPoint { get; set; }
