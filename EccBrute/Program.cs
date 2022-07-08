@@ -1,182 +1,135 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.IO;
-using System.Text;
-using System.Diagnostics;
-using System.Threading;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EccBrute
 {
+	static class ListExt
+	{
+		public static int IndexOf(this List<EccChainEndpoint> list, FastEccPoint point)
+			=> IndexOf(list, point, 0, list.Count - 1);
+
+		private static int IndexOf(List<EccChainEndpoint> list, FastEccPoint point, int low, int high)
+		{
+			if (low > high) return -1;
+
+			int mid = (low + high) / 2;
+
+			var xcomp = point.CompareTo(list[mid]);
+
+			if (xcomp == 0)
+				return mid;
+			else if (xcomp == 1)
+				return IndexOf(list, point, mid + 1, high);
+			else
+				return IndexOf(list, point, low, mid - 1);
+		}
+	}
+
+	class EccChainEndpoint : FastEccPoint
+	{
+		public EccChainEndpoint(long endPrivKey, long x, long y) : base(x, y)
+		{
+			EndPrivKey = endPrivKey;
+		}
+		public long EndPrivKey;
+	}
+
 	class Program
 	{
-		static string lastMessageText = "";
-		static BlockingCollection<(bool repeating, string text)> Message = new BlockingCollection<(bool repeating, string text)>();
-		static BruteWorker[] Workers;
-		static int[] WorkerProgress;
-		static long[] WorkerCount;
-		static long AlreadyCompleted;
-		static BruteDB Progress;
-		static string progressPath;
-		static DateTime StartTime;
-
-		static void Main(string[] args)
+		static void FindKeys(SemaphoreSlim sema, List<EccChainEndpoint> eccChainEndpoints, FastEccPoint generator, PublicKey publicKey)
 		{
-#if DEBUG
-			var workFile = "testwork.ini";
-#else
-			var workFile = "work.ini";
-#endif
-			progressPath = Path.GetFileNameWithoutExtension(workFile) + ".json";
-			Progress = BruteDB.OpenOrCreate(WorkFile.Open(workFile), progressPath);
-
-			if (Progress.PublicKeysToFind.Count == 0)
+			try
 			{
-				Console.WriteLine($"There are {Progress.FoundKeyPairs.Count} found keys in the database and no more public keys to find!");
-				return;
+				sema.Wait();
+				var eccp = new FastEccPoint(publicKey.X, publicKey.Y);
+				int index, numAdds = 0;
+				while ((index = eccChainEndpoints.IndexOf(eccp)) == -1)
+				{
+					eccp += generator;
+					numAdds++;
+				}
+				var indexPoint = eccChainEndpoints[index];
+				var privKey = indexPoint.EndPrivKey - numAdds;
+				var validator = generator * privKey;
+
+				if (validator.X != publicKey.X
+					|| validator.Y != publicKey.Y)
+				{
+					Console.WriteLine($"Private key validation for ({publicKey.X}, {publicKey.Y}) failes!");
+					return;
+				}
+				var priv = new PrivateKey { Key = privKey };
+				var message = $"Found Private Key {priv.ToBase64BEString()} for Public Key {publicKey.ToBase64BEString()}";
+				Console.WriteLine(message);
 			}
-
-			Thread.CurrentThread.Priority = ThreadPriority.Highest;
-			Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle;
-
-			var workers = Progress.Workers;
-			Workers = new BruteWorker[workers.Length];
-			WorkerProgress = new int[workers.Length];
-			WorkerCount = new long[workers.Length];
-			AlreadyCompleted = workers.Sum(w => (w.CurrentPosition[0] - w.Start) * 4);
-			StartTime = DateTime.Now;
-
-			for (int i = 0; i < workers.Length; i++)
+			finally
 			{
-				//Workers[i] = new BruteWorker(i, workers[i].Start, workers[i].CurrentPosition, workers[i].End, Progress.PublicKeysToFind, workers[i].CurrentPoint, Progress.WorkFile.GeneratorPoint);
-				Workers[i] = new BruteWorker(i, workers[i].Start, workers[i].CurrentPosition, workers[i].End, Progress.PublicKeysToFind, workers[i].CurrentPoint, Progress.WorkFile.GeneratorPoint);
-				Workers[i].ProgressChanged += Worker_ProgressChanged;
-				Workers[i].FoundKey += Worker_FoundKey;
-				Workers[i].RunWorkerCompleted += Worker_RunWorkerCompleted;
-				Workers[i].RunWorkerAsync();
+				sema.Release();
 			}
-
-			var lastProgressReport = DateTime.Now;
-			var reportInterval = TimeSpan.FromSeconds(1);
-			while (true)
-			{
-				try
-				{
-					var message = Message.Take();
-
-					if (DateTime.Now - lastProgressReport < reportInterval && message.repeating)
-						continue;
-
-					var sb = new StringBuilder();
-					sb.Append('\b', lastMessageText.Length);
-					sb.Append(message.text);
-					sb.Append(' ', Math.Max(0,lastMessageText.Length - message.text.Length));
-
-					if (message.repeating)
-					{
-						Console.Write(sb);
-						lastMessageText = message.text;
-					}
-					else
-					{
-						Console.WriteLine(sb); 
-						Console.Write(lastMessageText);
-					}
-
-					lastProgressReport = DateTime.Now;
-					Progress.Save(progressPath);
-				}
-				catch(InvalidOperationException)
-				{
-					string status = Progress.PublicKeysToFind.Count == 0 ? "\r\nFound all keys!" : $"\r\nFinished searching. {Progress.PublicKeysToFind.Count} keys not found.";
-					Console.WriteLine(status);
-					break;
-				}
-				catch (IOException)
-				{
-					//Ignore and try writing again on next update
-				}
-				catch(Exception ex)
-				{
-					Console.WriteLine($"\r\nError:\t{ex.Message}");
-				}
-			}
-
-			Console.ReadLine();
 		}
 
-		private static void Worker_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
+		static List<EccChainEndpoint> GenerateDb(FastEccPoint basepoint, long start, long end, long stepSize)
 		{
-			var worker = sender as BruteWorker;
-			WorkerProgress[worker.ThreadId] = 10000;
-
-			if (WorkerProgress.Sum() == WorkerProgress.Length * 10000)
-				Message.CompleteAdding();
-		}
-		private class KeyPairComparer : IEqualityComparer<PublicKey>
-		{
-			public bool Equals(PublicKey x, PublicKey y)
+			List<EccChainEndpoint> endpoints = new();
+			long endVal = start;
+			do
 			{
-				return x.X == y.X && x.Y == y.Y;
-			}
+				endVal = Math.Min(end - 1, endVal + stepSize);
+				var endPoint = basepoint * endVal;
+				var e = new EccChainEndpoint(endVal, endPoint.X, endPoint.Y);
+				endpoints.Add(e);
+			} while (endVal < end - 1);
 
-			public int GetHashCode([DisallowNull] PublicKey obj)
-			{
-				return obj.GetHashCode();
-			}
-		}
-		private static PublicKey[] Worker_FoundKey(object sender, KeyPair e)
-		{
-			Progress.FoundKeyPairs.Add(e);
-
-			Progress.PublicKeysToFind = Progress.PublicKeysToFind.Except(Progress.FoundKeyPairs.Select(k=> k.PublicKey), new KeyPairComparer()).ToList();
-
-			if (!Progress.PublicKeysToFind.Any())
-			{
-				foreach (var w in Workers)
-					w.CancelAsync();
-			}
-
-			var message = $"Found Private Key {e.PrivateKey} for Public Key ({e.PublicKey.X}, {e.PublicKey.Y})";
-			Message.Add((false, message));
-
-			if (!Progress.PublicKeysToFind.Any())
-				Message.CompleteAdding();
-			return Progress.PublicKeysToFind.ToArray();
+			return endpoints;
 		}
 
-		private static void Worker_ProgressChanged(object sender, System.ComponentModel.ProgressChangedEventArgs e)
+		static async Task Main(string[] args)
 		{
-			var worker = sender as BruteWorker;
-			var state = e.UserState as WorkerState;
+			var workFilePath = "work.ini";
 
-			Progress.Workers[worker.ThreadId].CurrentPoint = state.CurrentPoint2;
-			Progress.Workers[worker.ThreadId].CurrentPosition = state.CurrentPosition2;
+			var workFile = WorkFile.Open(workFilePath);
+			var order = workFile.Order.Value;
+			var generator = workFile.GeneratorPoint;
 
-			WorkerProgress[worker.ThreadId] = e.ProgressPercentage;
-			WorkerCount[worker.ThreadId] = (worker.CurrentPosition[0] - worker.Start) * 4;
+			List<EccChainEndpoint> endpoints = new List<EccChainEndpoint>();
 
-			var total = Progress.WorkFile.End - Progress.WorkFile.Start - AlreadyCompleted;
-			var totalProcessed = WorkerCount.Sum() - AlreadyCompleted;
-			var remaining = total - totalProcessed;
-
-			var rate = totalProcessed / (DateTime.Now - StartTime).TotalSeconds;
-
-			if (rate == 0) return;
-
-			var remainingTime = TimeSpan.FromSeconds(remaining / rate);
-
-			var sb = new StringBuilder();
-
-			for (int i = 0; i < WorkerProgress.Length; i++)
+			int numThreads = 8, entriesPerThread = 40000;
+			var numDbEntryes = numThreads * entriesPerThread;
+			long stepSize = order / numDbEntryes + 1;
+			long threadStart = 0;
+			List<Task<List<EccChainEndpoint>>> dbGenTasks = new List<Task<List<EccChainEndpoint>>>();
+			Console.WriteLine($"Generating a database of {numDbEntryes} ECC Points...");
+			for (int t = 0; t < numThreads; t++)
 			{
-				sb.Append($"T{i}:{WorkerProgress[i] / 10000d:P} | ");
-			}
-			sb.Append($"ETA: {remainingTime:dd\\:hh\\:mm\\:ss}");
+				var start = threadStart;
+				var end = Math.Min(order - 1, start + stepSize * entriesPerThread);
+				threadStart = end;
 
-			Message.TryAdd((true, sb.ToString()));
-		}		
+				dbGenTasks.Add(Task.Run(() => GenerateDb(generator, start, end, stepSize)));
+			}
+
+			var allLists = await Task.WhenAll(dbGenTasks);
+
+			Console.WriteLine("Sorting the database");
+
+			for (int i = 0; i < allLists.Length; i++)
+				endpoints.AddRange(allLists[i]);
+
+			endpoints.Sort();
+
+			Console.WriteLine($"\r\n--- BEGIN finding private keys for {workFile.PublicKeys.Count} public keys ---\r\n");
+
+			List<Task> keySearchTasks = new();
+			SemaphoreSlim sema = new(numThreads, numThreads);
+			foreach (var pk in workFile.PublicKeys)
+			{
+				keySearchTasks.Add(Task.Run(() => FindKeys(sema, endpoints, generator, pk)));
+			}
+
+			await Task.WhenAll(keySearchTasks);
+			Console.WriteLine("\r\nDone!");
+		}
 	}
 }

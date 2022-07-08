@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.Intrinsics;
-using System.Runtime.Intrinsics.X86;
-using System.Security.Cryptography;
 
 namespace EccBrute
 {
@@ -18,15 +15,14 @@ namespace EccBrute
 		public FastEccPoint GeneratorPoint { get; set; }
 		public long Start { get; set; }
 		public long End { get; set; }
-		public int Threads { get; set; }		
+		public int Threads { get; set; }
 		public List<PublicKey> PublicKeys { get; set; }
 
 		public static WorkFile Open(string path)
 		{
 			var lines = File.ReadAllLines(path);
 
-			long q = 0, a = 0, b = 0, gx = 0, gy = 0, start=0, end=0;
-			long? order = null;
+			long q = 0, a = 0, b = 0, gx = 0, gy = 0, start = 0, end = 0, order = 0;
 			var threads = 1;
 			var publicKeys64 = Array.Empty<string>();
 
@@ -46,11 +42,8 @@ namespace EccBrute
 					continue;
 				if (key == "b" && long.TryParse(value, out b))
 					continue;
-				if (key == "order" && long.TryParse(value, out var o))
-				{
-					order = o;
+				if (key == "order" && long.TryParse(value, out order))
 					continue;
-				}
 				if (key == "gx" && long.TryParse(value, out gx))
 					continue;
 				if (key == "gy" && long.TryParse(value, out gy))
@@ -65,7 +58,7 @@ namespace EccBrute
 					publicKeys64 = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 			}
-			if (q ==0|| a ==0||b ==0 || gx == 0 || gy == 0)
+			if (q == 0 || a == 0 || b == 0 || gx == 0 || gy == 0 || order == 0)
 				throw new Exception("Error reading ECC parameters (Q, A, B, Gx, Gy)");
 			if (start == 0 || end == 0)
 				throw new Exception("Error reading private key search range (start and end)");
@@ -75,9 +68,10 @@ namespace EccBrute
 			var publicKeys = new List<PublicKey>();
 
 			foreach (var pk in publicKeys64)
-				publicKeys.Add(PublicKey.Parse(pk));				
-
-			FastEccPoint.Q = (ulong)q;
+			{
+				var parsed = PublicKey.Parse(pk);
+				publicKeys.Add(parsed);
+			}
 
 			return new WorkFile
 			{
@@ -87,7 +81,7 @@ namespace EccBrute
 				Order = order,
 				Gx = gx,
 				Gy = gy,
-				GeneratorPoint = new FastEccPoint { FourPointsX = Vector256.Create(gx, gx, gx, gx), FourPointsY = Vector256.Create(gy, gy, gy, gy) },
+				GeneratorPoint = new FastEccPoint(gx, gy, q, a),
 				Start = start,
 				End = end,
 				Threads = threads,

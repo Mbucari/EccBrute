@@ -32,8 +32,8 @@ namespace EccBrute
 
 			var bytes = new byte[Size];
 
-			Array.Copy(b1, 0, bytes, Size - b1.Length, b1.Length);
-			Array.Copy(b2, 0, bytes, 2 * Size - b2.Length, b2.Length);
+			Array.Copy(b1, 0, bytes, Size / 2 - b1.Length, b1.Length);
+			Array.Copy(b2, 0, bytes, Size - b2.Length, b2.Length);
 
 			return Convert.ToBase64String(bytes);
 		}

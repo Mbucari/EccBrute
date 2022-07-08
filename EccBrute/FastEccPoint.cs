@@ -1,363 +1,150 @@
-﻿using Org.BouncyCastle.Math.EC;
-using System;
-using System.Buffers;
-using System.Runtime.Intrinsics;
-using System.Runtime.Intrinsics.X86;
+﻿using System;
+using System.Numerics;
 
 namespace EccBrute
 {
-	unsafe class FastEccPoint
+	class FastEccPoint : IComparable<FastEccPoint>
 	{
-		public static ulong Q;
+		public static long Prime { get; private set; }
+		public static long A { get; private set; }
+		public long X { get; }
+		public long Y { get; }
 
-		public long[] FourPointsXPub
+		public FastEccPoint(long x, long y)
 		{
-			get
-			{
-				var longArr = new long[4];
-				longArr[0] = FourPointsX.GetElement(0);
-				longArr[1] = FourPointsX.GetElement(1);
-				longArr[2] = FourPointsX.GetElement(2);
-				longArr[3] = FourPointsX.GetElement(3);
-				return longArr;
-			}
-			set
-			{
-				FourPointsX = Vector256.Create(value[0], value[1], value[2], value[3]);
-			}
+			X = x;
+			Y = y;
 		}
-		public long[] FourPointsYPub
+		public FastEccPoint(long x, long y, long prime, long a) : this(x, y)
 		{
-			get
-			{
-				var longArr = new long[4];
-				longArr[0] = FourPointsY.GetElement(0);
-				longArr[1] = FourPointsY.GetElement(1);
-				longArr[2] = FourPointsY.GetElement(2);
-				longArr[3] = FourPointsY.GetElement(3);
-				return longArr;
-			}
-			set
-			{
-				FourPointsY = Vector256.Create(value[0], value[1], value[2], value[3]);
-			}
+			Prime = prime;
+			A = a;
 		}
 
-		public Vector256<long> FourPointsX;
-		public Vector256<long> FourPointsY;
-
-		private readonly Vector256<ulong> Vec64;
-		private readonly Vector256<long> Ones;
-		private readonly Vector256<long> Twos;
-		private readonly Vector256<ulong> UOnes;
-		private readonly Vector256<long> QVector;
-
-		private readonly MemoryHandle hbuff256A;
-		private readonly MemoryHandle hbuff256B;
-		private readonly MemoryHandle hHigh;
-		private readonly MemoryHandle hLow;
-		private readonly MemoryHandle hShifts;
-		private readonly MemoryHandle hRems;
-		private readonly MemoryHandle hUNewVals;
-		private readonly MemoryHandle hNewVals;
-		private readonly MemoryHandle hQuotXr;
-		private readonly MemoryHandle hQuotXs;
-
-		private readonly long* pbuff256A;
-		private readonly long* pbuff256B;
-		private readonly ulong* pHigh;
-		private readonly ulong* pLow;
-		private readonly ulong* pShifts;
-		private readonly ulong* pRems;
-		private readonly ulong* pUNewVals;
-		private readonly long* pNewVals;
-		private readonly long* pQuotXr;
-		private readonly long* pQuotXs;
-
-		public FastEccPoint()
+		public int CompareTo(FastEccPoint other)
 		{
-			Memory<long> buff256A = new long[4];
-			Memory<long> buff256B = new long[4];
-			Memory<ulong> high = new ulong[4];
-			Memory<ulong> low = new ulong[4];
-			Memory<ulong> shifts = new ulong[4];
-			Memory<ulong> rems = new ulong[4];
-			Memory<ulong> uNewVals = new ulong[4];
-			Memory<long> newVals = new long[4];
-			Memory<long> QuotXr = new long[4];
-			Memory<long> QuotXs = new long[4];
-
-			hbuff256A = buff256A.Pin();
-			hbuff256B = buff256B.Pin();
-			hHigh = high.Pin();
-			hLow = low.Pin();
-			hShifts = shifts.Pin();
-			hRems = rems.Pin();
-			hUNewVals = uNewVals.Pin();
-			hNewVals = newVals.Pin();
-			hQuotXr = QuotXr.Pin();
-			hQuotXs = QuotXs.Pin();
-
-			pbuff256A = (long*)hbuff256A.Pointer;
-			pbuff256B = (long*)hbuff256B.Pointer;
-			pHigh = (ulong*)hHigh.Pointer;
-			pLow = (ulong*)hLow.Pointer;
-			pShifts = (ulong*)hShifts.Pointer;
-			pRems = (ulong*)hRems.Pointer;
-			pUNewVals = (ulong*)hUNewVals.Pointer;
-			pNewVals = (long*)hNewVals.Pointer;
-			pQuotXr = (long*)hQuotXr.Pointer;
-			pQuotXs = (long*)hQuotXs.Pointer;
-
-			Vec64 = Vector256.Create(64UL, 64UL, 64UL, 64UL);
-			UOnes = Vector256.Create(1UL, 1UL, 1UL, 1UL);
-			Ones = Vector256.Create(1L, 1L, 1L, 1L);
-			Twos = Vector256.Create(2L, 2L, 2L, 2L);
-			QVector = Vector256.Create((long)Q, (long)Q, (long)Q, (long)Q);
-		}
-		public FastEccPoint(ECPoint eCPoint1, ECPoint eCPoint2, ECPoint eCPoint3, ECPoint eCPoint4) : this()
-		{
-			if (!eCPoint1.IsNormalized())
-				eCPoint1.Normalize();
-
-			if (!eCPoint2.IsNormalized())
-				eCPoint2.Normalize();
-
-			if (!eCPoint3.IsNormalized())
-				eCPoint3.Normalize();
-
-			if (!eCPoint4.IsNormalized())
-				eCPoint4.Normalize();
-
-			FourPointsX = Vector256.Create
-				(
-					eCPoint1.XCoord.ToBigInteger().LongValueExact,
-					eCPoint2.XCoord.ToBigInteger().LongValueExact,
-					eCPoint3.XCoord.ToBigInteger().LongValueExact,
-					eCPoint4.XCoord.ToBigInteger().LongValueExact
-				);
-
-			FourPointsY = Vector256.Create
-				(
-					eCPoint1.YCoord.ToBigInteger().LongValueExact,
-					eCPoint2.YCoord.ToBigInteger().LongValueExact,
-					eCPoint3.YCoord.ToBigInteger().LongValueExact,
-					eCPoint4.YCoord.ToBigInteger().LongValueExact
-				);
+			var xcomp = X.CompareTo(other.X);
+			if (xcomp == 0)
+				return Y.CompareTo(other.Y);
+			else return xcomp;
 		}
 
 		public FastEccPoint Clone()
 		{
-			Avx.Store(pQuotXr, FourPointsX);
-			Avx.Store(pQuotXs, FourPointsY);
-
-			return new FastEccPoint { FourPointsX = Avx.LoadVector256(pQuotXr), FourPointsY = Avx.LoadVector256(pQuotXs) };
+			return new FastEccPoint(X, Y);
 		}
 
-		public void Add(FastEccPoint b)
+		public static FastEccPoint operator +(FastEccPoint p, FastEccPoint q)
 		{
-			var hvec = ModSubtract(FourPointsX, b.FourPointsX);
-			var rvec = ModSubtract(FourPointsY, b.FourPointsY);
-
-			var hsquaredvec = MulMod(hvec, hvec, Q);
-			var gvec = MulMod(hsquaredvec, hvec, Q);
-			var vvec = MulMod(hsquaredvec, FourPointsX, Q);
-
-
-			FourPointsX = ModSubtract(Mod(Avx2.Add(MulMod(rvec, rvec, Q), gvec), (long)Q), Mod(MulMod(Twos, vvec, Q), (long)Q));
-			FourPointsY = MultiplyMinusProduct(ModSubtract(vvec, FourPointsX), rvec, gvec, FourPointsY);
-
-			var ZINV = ModInverse(hvec);
-			var ZINV2 = MulMod(ZINV, ZINV, Q);
-			var ZINV3 = MulMod(ZINV2, ZINV, Q);
-
-			FourPointsX = MulMod(FourPointsX, ZINV2, Q);
-			FourPointsY = MulMod(FourPointsY, ZINV3, Q);
+			var (xr, yr) = Add(p.X, p.Y, q.X, q.Y, Prime);
+			return new FastEccPoint(xr, yr);
 		}
-		private Vector256<long> Mod(Vector256<long> x1, long mod)
+		public static FastEccPoint operator *(FastEccPoint p, long scalar) => p.Multiply(scalar);
+		public static FastEccPoint operator *(long scalar, FastEccPoint p) => p.Multiply(scalar);
+
+		//Double and Add algorithm
+		private FastEccPoint Multiply(long scalar)
 		{
-			Avx.Store(pQuotXr, x1);
+			long xi = X, yi = Y, XM = 0, YM = 0, bitPosition = 1;
 
-			*pNewVals = *pQuotXr % mod;
-			*(pNewVals + 1) = *(pQuotXr + 1) % mod;
-			*(pNewVals + 2) = *(pQuotXr + 2) % mod;
-			*(pNewVals + 3) = *(pQuotXr + 3) % mod;
-
-			return Avx.LoadVector256(pNewVals);
-		}
-
-		private Vector256<long> ModSubtract(Vector256<long> x1, Vector256<long> x2)
-		{
-			var diff = Avx2.Subtract(x1, x2);
-
-			return Avx2.Add(diff, Avx2.And(Avx2.CompareGreaterThan(Vector256<long>.Zero, diff), QVector));
-		}
-
-		private Vector256<long> MultiplyMinusProduct(Vector256<long> baseNum, Vector256<long> b, Vector256<long> x, Vector256<long> y)
-		{
-			return ModSubtract(MulMod(baseNum, b, Q), MulMod(x, y, Q));
-		}
-
-		//ExtendedEuclideanAlgorithm
-		private Vector256<long> ModInverse2(Vector256<long> m)
-		{
-			Vector256<long> r = QVector, s = Vector256<long>.Zero, old_r = m, old_s = Ones;
-
-			var pQuotient = pNewVals;
-			while (!Avx.TestZ(r, r))
+			while(bitPosition < scalar)
 			{
-				Avx.Store(pbuff256A, old_r);
+				if ((bitPosition & scalar) == bitPosition)
+				{
+					(XM, YM) =
+						XM == 0 && YM == 0
+						? (xi, yi)
+						: Add(XM, YM, xi, yi, Prime);
+				}
 
-				var cmp = Avx2.CompareGreaterThan(Ones, r);
+				(xi, yi) = Double(xi, yi, Prime, A);
+				bitPosition <<= 1;
+			}
 
-				Avx.Store(pbuff256B, Avx2.Or(cmp, r));
+			return new FastEccPoint(XM, YM);
+		}
 
-				cmp = Avx2.CompareGreaterThan(r, Vector256<long>.Zero);
+		private static (long XR, long YR) Double(long XP, long YP, long Q, long a)
+		{
+			var m = MulMod((3 * MulMod(XP, XP, Q) + a) % Q, ModInverse((2 * YP) % Q, Q), Q);
+			var msquared = MulMod(m, m, Q);
 
-				*pQuotient = *pbuff256A / *pbuff256B;
-				*(pQuotient + 1) = *(pbuff256A + 1) / *(pbuff256B + 1);
-				*(pQuotient + 2) = *(pbuff256A + 2) / *(pbuff256B + 2);
-				*(pQuotient + 3) = *(pbuff256A + 3) / *(pbuff256B + 3);
+			var xr = ModSubtract(ModSubtract(msquared, XP, Q), XP, Q);
+			var negYr = (YP + MulMod(m, ModSubtract(xr, XP, Q), Q)) % Q;
+			var yr = ModSubtract(Q, negYr, Q);
 
-				*pQuotXr = *pQuotient * *pbuff256B;
-				*(pQuotXr + 1) = *(pQuotient + 1) * *(pbuff256B + 1);
-				*(pQuotXr + 2) = *(pQuotient + 2) * *(pbuff256B + 2);
-				*(pQuotXr + 3) = *(pQuotient + 3) * *(pbuff256B + 3);
+			return (xr, yr);
+		}
+
+		//ht tps://andrea.corbellini.name/2015/05/23/elliptic-curve-cryptography-finite-fields-and-discrete-logarithms/#algebraic-sum
+		private static (long XR, long YR) Add(long XP, long YP, long XQ, long YQ, long Q)
+		{
+			var m = MulMod(ModSubtract(YP, YQ, Q), ModInverse(ModSubtract(XP, XQ, Q), Q), Q);
+			var msquared = MulMod(m, m, Q);
+
+			var xr = ModSubtract(ModSubtract(msquared, XP, Q), XQ, Q);
+			var negYr = (YP + MulMod(m, ModSubtract(xr, XP, Q), Q)) % Q;
+			var yr = ModSubtract(Q, negYr, Q);
+
+			return (xr, yr);
+		}
+
+		private static long ModSubtract(long x1, long x2, long Q)
+			=> x2 > x1 ? x1 - x2 + Q : x1 - x2;
+
+		//Stripped down extended euclidean algorithm
+		private static long ModInverse(long num, long Q)
+		{
+			long s = 0, r = Q, old_s = 1, old_r = num;
+
+			while (r != 0)
+			{
+				var quotient = old_r / r;
 
 				var tmp = r;
-				r = Avx2.And(cmp, Avx2.Subtract(old_r, Avx2.And(cmp, Avx.LoadVector256(pQuotXr))));
+				r = old_r - quotient * r;
 				old_r = tmp;
 
-				cmp = Avx2.CompareGreaterThan(r, Vector256<long>.Zero);
-
-				Avx.Store(pbuff256B, s);
-
-				*pQuotXs = *pQuotient * *pbuff256B;
-				*(pQuotXs + 1) = *(pQuotient + 1) * *(pbuff256B + 1);
-				*(pQuotXs + 2) = *(pQuotient + 2) * *(pbuff256B + 2);
-				*(pQuotXs + 3) = *(pQuotient + 3) * *(pbuff256B + 3);
-
 				tmp = s;
-				s = Avx2.Or(Avx2.AndNot(cmp, s), Avx2.And(cmp, Avx2.Subtract(old_s, Avx.LoadVector256(pQuotXs))));
+				s = old_s - quotient * s;
 				old_s = tmp;
 			}
 
-			var adding = Avx2.And(Avx2.CompareGreaterThan(Vector256<long>.Zero, old_s), QVector);
-
-			return Avx2.Add(old_s, adding);
+			if (old_s < 0)
+				old_s += Q;
+			return old_s;
 		}
-		//ExtendedEuclideanAlgorithm
-		private Vector256<long> ModInverse(Vector256<long> m)
-		{
-			Vector256<long> r = QVector, s = Vector256<long>.Zero, old_r = m, old_s = Ones;
-
-			var pQuotient = pNewVals;
-			while (!Avx.TestZ(r, r))
-			{
-				Avx.Store(pbuff256A, old_r);
-				Avx.Store(pbuff256B, r);
-
-				*pQuotient = *pbuff256B == 0 ? 0 : *pbuff256A / *pbuff256B;
-				*(pQuotient + 1) = *(pbuff256B + 1) == 0 ? 0 : *(pbuff256A + 1) / *(pbuff256B + 1);
-				*(pQuotient + 2) = *(pbuff256B + 2) == 0 ? 0 : *(pbuff256A + 2) / *(pbuff256B + 2);
-				*(pQuotient + 3) = *(pbuff256B + 3) == 0 ? 0 : *(pbuff256A + 3) / *(pbuff256B + 3);
-
-				*pQuotXr = *pQuotient * *pbuff256B;
-				*(pQuotXr + 1) = *(pQuotient + 1) * *(pbuff256B + 1);
-				*(pQuotXr + 2) = *(pQuotient + 2) * *(pbuff256B + 2);
-				*(pQuotXr + 3) = *(pQuotient + 3) * *(pbuff256B + 3);
-
-				var cmp = Avx2.CompareGreaterThan(r, Vector256<long>.Zero);
-
-				var tmp = r;
-				r = Avx2.And(cmp, Avx2.Subtract(old_r, Avx.LoadVector256(pQuotXr)));
-				old_r = tmp;
-
-				cmp = Avx2.CompareGreaterThan(r, Vector256<long>.Zero);
-
-				Avx.Store(pbuff256B, s);
-
-				*pQuotXs = *pQuotient * *pbuff256B;
-				*(pQuotXs + 1) = *(pQuotient + 1) * *(pbuff256B + 1);
-				*(pQuotXs + 2) = *(pQuotient + 2) * *(pbuff256B + 2);
-				*(pQuotXs + 3) = *(pQuotient + 3) * *(pbuff256B + 3);
-
-				tmp = s;
-				s = Avx2.Or(Avx2.AndNot(cmp, s), Avx2.And(cmp, Avx2.Subtract(old_s, Avx.LoadVector256(pQuotXs))));
-				old_s = tmp;
-			}
-
-			var adding = Avx2.And(Avx2.CompareGreaterThan(Vector256<long>.Zero, old_s), QVector);
-
-			return Avx2.Add(old_s, adding);
-		}
-
 
 		/// <summary>
-		/// Fast mulmod. Works for (a * b).bitlen + mod.bitlen <= 128.  
+		/// Fast mulmod. Works for bitlen(a * b) + bitlen(mod) <= 128.  
 		/// If a, b, and mod are same size, max supported size is 42 bits.
 		/// </summary>
-		Vector256<long> MulMod(Vector256<long> a, Vector256<long> b, ulong mod)
+		static long MulMod(long a, long b, long mod)
 		{
-			Avx.Store(pbuff256A, a);
-			Avx.Store(pbuff256B, b);
+			var high = Math.BigMul((ulong)a, (ulong)b, out var low);
 
-			var pbuffaU = (ulong*)pbuff256A;
-			var pbuffbU = (ulong*)pbuff256B;
+			//Count how many bits are in the high qword
+			var shiftCount = 64 - (int)System.Runtime.Intrinsics.X86.Lzcnt.X64.LeadingZeroCount(high);
 
-			*pHigh = Math.BigMul(*pbuffaU, *pbuffbU, out *pLow);
-			*(pHigh + 1) = Math.BigMul(*(pbuffaU + 1), *(pbuffbU + 1), out *(pLow + 1));
-			*(pHigh + 2) = Math.BigMul(*(pbuffaU + 2), *(pbuffbU + 2), out *(pLow + 2));
-			*(pHigh + 3) = Math.BigMul(*(pbuffaU + 3), *(pbuffbU + 3), out *(pLow + 3));
+			//Shift number to fill high qword
+			high = (high << (64 - shiftCount)) | (low >> shiftCount);
 
-			var HighVec = Avx.LoadVector256(pHigh);
-			var LowVec = Avx.LoadVector256(pLow);
+			var rem = high % (ulong)mod;
+			var mask = (1UL << shiftCount) - 1;
+			var newVal = (rem << shiftCount) | (mask & low);
 
-			*pShifts = Lzcnt.X64.LeadingZeroCount(*pHigh);
-			*(pShifts + 1) = Lzcnt.X64.LeadingZeroCount(*(pHigh + 1));
-			*(pShifts + 2) = Lzcnt.X64.LeadingZeroCount(*(pHigh + 2));
-			*(pShifts + 3) = Lzcnt.X64.LeadingZeroCount(*(pHigh + 3));
-
-			var ShiftsVec = Avx.LoadVector256(pShifts);
-			var negShifts = Avx2.Subtract(Vec64, ShiftsVec);
-
-			Avx.Store(pHigh, Avx2.Or(Avx2.ShiftLeftLogicalVariable(HighVec, ShiftsVec), Avx2.ShiftRightLogicalVariable(LowVec, negShifts)));
-
-			*pRems = *pHigh % mod;
-			*(pRems + 1) = *(pHigh + 1) % mod;
-			*(pRems + 2) = *(pHigh + 2) % mod;
-			*(pRems + 3) = *(pHigh + 3) % mod;
-
-			var newValues = Avx2.Or(Avx2.ShiftLeftLogicalVariable(Avx.LoadVector256(pRems), negShifts), Avx2.And(Avx2.Subtract(Avx2.ShiftLeftLogicalVariable(UOnes, negShifts), UOnes), LowVec));
-
-			Avx.Store(pUNewVals, newValues);
-
-			var pNewValsU = (ulong*)pNewVals;
-			*pNewValsU = *pUNewVals % mod;
-			*(pNewValsU + 1) = *(pUNewVals + 1) % mod;
-			*(pNewValsU + 2) = *(pUNewVals + 2) % mod;
-			*(pNewValsU + 3) = *(pUNewVals + 3) % mod;
-
-			return Avx.LoadVector256(pNewVals);
+			return (long)(newVal % (ulong)mod);
 		}
-
-		~FastEccPoint()
+		
+		static long MulMod2(long a, long b, long mod)
 		{
-			hbuff256A.Dispose();
-			hbuff256B.Dispose();
-			hHigh.Dispose();
-			hLow.Dispose();
-			hShifts.Dispose();
-			hRems.Dispose();
-			hUNewVals.Dispose();
-			hNewVals.Dispose();
-			hQuotXr.Dispose();
-			hQuotXs.Dispose();
+			var aBig = new BigInteger(a);
+			var bBig = new BigInteger(b);
+			return (long)((aBig * bBig) % mod);
 		}
-
 		public override string ToString()
 		{
-			return $"({FourPointsX},{FourPointsY})";
+			return $"({X:x},{Y:x})";
 		}
 	}
 }
