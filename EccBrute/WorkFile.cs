@@ -6,13 +6,7 @@ namespace EccBrute
 {
 	class WorkFile
 	{
-		public long Q { get; set; }
-		public long A { get; set; }
-		public long B { get; set; }
-		public long Order { get; set; }
-		public long Gx { get; set; }
-		public long Gy { get; set; }
-		public FastEccPoint GeneratorPoint { get; set; }
+		public EllipticCurve Curve { get; private init; }
 		public long Start { get; set; }
 		public long End { get; set; }
 		public int Threads { get; set; }
@@ -75,13 +69,7 @@ namespace EccBrute
 
 			return new WorkFile
 			{
-				Q = q,
-				A = a,
-				B = b,
-				Order = order,
-				Gx = gx,
-				Gy = gy,
-				GeneratorPoint = new FastEccPoint(gx, gy, q, a),
+				Curve = new EllipticCurve(a, b, q,order, gx, gy),
 				Start = start,
 				End = end,
 				Threads = threads,
