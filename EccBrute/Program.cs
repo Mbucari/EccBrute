@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -93,19 +95,65 @@ namespace EccBrute
 			Console.WriteLine(message);
 		}
 
-		static void GenerateDb(Span<EccChainEndpoint> endpoints, EllipticCurve curve, long start, long stepSize, int numSteps)
+		static void GenerateDb(Span<EccChainEndpoint> endpoints, EllipticCurve curve, long endNum, long stepSize, int numSteps)
 		{
-			var end = start - stepSize * (numSteps - 1);
+			var startNum = endNum - stepSize * (numSteps - 1);
 
-			var startP = curve.ScaleGenerator(end);
+			var startP = curve.ScaleGenerator(startNum);
 			var stepP = curve.ScaleGenerator(stepSize);
-			endpoints[0] = new EccChainEndpoint(end, startP);
+			endpoints[0] = new EccChainEndpoint(startNum, startP);
 
 			for (int i = 1; i < numSteps; i++)
 			{
-				end += stepSize;
+				startNum += stepSize;
 				startP = curve.Add(startP, stepP);
-				endpoints[i] = new EccChainEndpoint(end, startP);
+				endpoints[i] = new EccChainEndpoint(startNum, startP);
+			}
+		}
+
+		static int partition<T>(T[] arr, int low, int high)
+			where T: IComparable<T>
+		{
+			T temp;
+			var pivot = arr[high];
+			var i = low - 1;
+
+			for (int j = low; j <= high - 1; j++)
+			{
+				if (arr[j].CompareTo(pivot) <= 0)
+				{
+					i++;
+					temp = arr[i];
+					arr[i] = arr[j];
+					arr[j] = temp;
+				}
+			}
+
+			temp = arr[i + 1];
+			arr[i + 1] = arr[high];
+			arr[high] = temp;
+
+			return i + 1;
+		}
+
+		static async Task qSortAsync<T>(T[] arr, int low, int high, int numTasks, int maxThreads)
+			where T: IComparable<T>
+		{
+			if (low < high)
+			{
+				var pi = partition(arr, low, high);
+
+				if (numTasks < maxThreads)
+				{
+					await Task.WhenAll(
+						Task.Run(() => qSortAsync(arr, low, pi - 1, numTasks + 2, maxThreads)),
+						Task.Run(() => qSortAsync(arr, pi + 1, high, numTasks + 2, maxThreads)));
+				}
+				else
+				{
+					await qSortAsync(arr, low, pi - 1, numTasks, maxThreads);
+					await qSortAsync(arr, pi + 1, high, numTasks, maxThreads);
+				}
 			}
 		}
 
@@ -116,15 +164,17 @@ namespace EccBrute
 			var workFile = WorkFile.Open(workFilePath);
 			var generator = workFile.Curve.Generator;
 
-			long numDbEntryes = (long)(7 * Math.Sqrt(workFile.Curve.Order));
-			var numStepsPerThread = (numDbEntryes / workFile.Threads) + 1;
+			var rangePerThread = (workFile.Curve.Order - workFile.Start) / workFile.Threads;
+			//Always a multiple of Threads
+			var totalRange = rangePerThread * workFile.Threads;
 
-			long threadEnd = workFile.Curve.Order - 1;
-			long stepSize = ((workFile.Curve.Order - workFile.Start) / numDbEntryes);
-
-			numDbEntryes = (workFile.Threads - 1) * numStepsPerThread + ((threadEnd - workFile.Start - numStepsPerThread * stepSize * (workFile.Threads - 1)) / stepSize);
+			//Always a multiple of Threads
+			var numStepsPerThread = (int)(7 * Math.Sqrt(totalRange) / workFile.Threads);
+			long numDbEntryes = (long)numStepsPerThread * workFile.Threads;
+			var threadEnd = workFile.Curve.Order - 1;
 
 			var swOverall = Stopwatch.StartNew();
+			var sw = Stopwatch.StartNew();
 
 			var endpoints = new EccChainEndpoint[numDbEntryes];
 			var seg = new Memory<EccChainEndpoint>(endpoints);
@@ -132,21 +182,14 @@ namespace EccBrute
 
 			Console.WriteLine($"Generating a database of {numDbEntryes} ECC Points...");
 
-			long numsteps = 0;
-			var sw = Stopwatch.StartNew();
 			for (int t = 0; t < workFile.Threads; t++)
 			{
-				var numSteps = (int)Math.Min(numStepsPerThread, (threadEnd - workFile.Start) / stepSize);
-				numDbEntryes -= numSteps;
+				var endNum = threadEnd;
+				threadEnd -= rangePerThread;
+				var stepSize = rangePerThread / numStepsPerThread;
 
-				var slice = seg.Slice((int)numDbEntryes, numSteps);
-				numsteps += numSteps;
-
-				var start = threadEnd;
-
-				dbGenTasks.Add(Task.Run(() => GenerateDb(slice.Span, workFile.Curve, start, stepSize, numSteps)));
-
-				threadEnd -= numStepsPerThread * stepSize;
+				var slice = seg.Slice((int)(numDbEntryes / workFile.Threads * t), numStepsPerThread);
+				dbGenTasks.Add(Task.Run(() => GenerateDb(slice.Span, workFile.Curve, endNum, stepSize, numStepsPerThread)));
 			}
 
 			await Task.WhenAll(dbGenTasks);
@@ -154,12 +197,8 @@ namespace EccBrute
 			sw.Stop();
 
 			Console.WriteLine($"Done Generating DB after {sw.ElapsedMilliseconds} ms");
-
 			Console.WriteLine("Sorting Points");
-			Array.Sort(endpoints);
-
-			//Console.WriteLine("Creating a HashSet");
-			//var hashSet = endpoints.Select(ep => ep.EndPoint).ToHashSet();
+			await qSortAsync(endpoints, 0, endpoints.Length - 1, 0, workFile.Threads);
 
 			Console.WriteLine($"\r\n--- BEGIN finding private keys for {workFile.PublicKeys.Count} public keys ---\r\n");
 
